@@ -1,7 +1,7 @@
 import fs from "fs";
-import {Client} from "discord.js";
-
-type Snowflake = string;
+import {Snowflake,} from "discord.js";
+import Utils from "./utils";
+import Worker from "./worker";
 
 export enum AttackMode {
     Random = "random",
@@ -41,19 +41,20 @@ export type IAppOptions = {
 }
 
 export default class App {
-    private readonly options: IAppOptions;
-    private readonly verbose: boolean;
+    public readonly options: IAppOptions;
 
-    private messages: string[];
-    private tokens: string[];
-    private nodes: Client[];
+    private readonly verbose: boolean;
+    private readonly worker: Worker;
+
+    public messages: string[];
+    public tokens: string[];
 
     public constructor(options: IAppOptions, verbose: boolean = true) {
         this.verbose = verbose;
         this.options = options;
         this.messages = [];
         this.tokens = [];
-        this.nodes = [];
+        this.worker = new Worker(this);
     }
 
     public init(): this {
@@ -98,7 +99,7 @@ export default class App {
 
         this.log(`Loading ${this.tokens.length} node(s) ...`);
 
-        const loaded: number = await this.loadNodes();
+        const loaded: number = await this.worker.loadNodes();
 
         if (loaded === 0) {
             this.log("No nodes could be loaded");
@@ -107,56 +108,21 @@ export default class App {
         }
 
         this.log(`Loaded ${loaded}/${this.tokens.length} node(s)`);
+        await this.worker.prepare();
+        this.log(`Launching attack ...`);
+
+        const sent: number = await this.worker.start();
+
+        this.log(`Attack completed | ${sent} message(s) sent`);
         
         return true;
-    }
-
-    private async loadNodes(): Promise<number> {
-        this.nodes = [];
-
-        let loaded: number = 0;
-
-        // TODO: Check for successful node creation
-        for (let i: number = 0; i < this.tokens.length; i++) {
-            this.nodes.push(await this.createNode(this.tokens[i]));
-            loaded++;
-        }
-
-        return loaded;
-    }
-
-    private async prepare(): Promise<this> {
-        let amount: number = this.tokens.length;
-
-        // TODO
-
-        for (let i: number = 0; i < this.nodes.length; i++) {
-            if (!this.nodes[i].guilds.has(this.options.TARGET_GUILD_ID)) {
-                // TODO: Join node by invite here
-            }
-        }
-
-        return this;
-    }
-
-    // TODO: Catch login errors (invalid tokens)
-    private async createNode(token: string): Promise<Client> {
-        const node: Client = new Client();
-
-        return new Promise((resolve) => {
-            node.on("ready", () => {
-                resolve();
-            });
-
-            node.login(token);
-        });
     }
 
     public isPopulated(): boolean {
         return this.messages.length > 0 && this.tokens.length > 0;
     }
 
-    private log(msg: string): this {
+    public log(msg: string): this {
         if (this.verbose) {
             console.log(msg);
         }
@@ -165,9 +131,7 @@ export default class App {
     }
 }
 
-const options: IAppOptions = process.env as any;
-
-export const app: App = new App(options);
+export const app: App = new App(Utils.getOptions());
 
 async function init(): Promise<void> {
     await app.init().attack();
