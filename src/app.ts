@@ -125,6 +125,20 @@ export default class App {
         return loaded;
     }
 
+    private async prepare(): Promise<this> {
+        let amount: number = this.tokens.length;
+
+        // TODO
+
+        for (let i: number = 0; i < this.nodes.length; i++) {
+            if (!this.nodes[i].guilds.has(this.options.TARGET_GUILD_ID)) {
+                // TODO: Join node by invite here
+            }
+        }
+
+        return this;
+    }
+
     // TODO: Catch login errors (invalid tokens)
     private async createNode(token: string): Promise<Client> {
         const node: Client = new Client();
