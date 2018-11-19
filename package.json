@@ -1,0 +1,30 @@
+{
+    "name": "v3ngeance",
+    "version": "1.0.0",
+    "description": "Sweet Discord vengeance",
+    "main": "dist/app.js",
+    "scripts": {
+        "start": "npm run build && node dist/app.js",
+        "build": "tsc"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/cloudrex/v3ngeance.git"
+    },
+    "keywords": [
+        "discord"
+    ],
+    "author": "CloudRex <cloudrex@outlook.com>",
+    "license": "MIT",
+    "bugs": {
+        "url": "https://github.com/cloudrex/v3ngeance/issues"
+    },
+    "homepage": "https://github.com/cloudrex/v3ngeance#readme",
+    "dependencies": {
+        "discord.js": "^11.4.2"
+    },
+    "devDependencies": {
+        "@types/node": "^10.12.9",
+        "typescript": "^3.1.6"
+    }
+}
