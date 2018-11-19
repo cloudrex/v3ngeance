@@ -1,5 +1,6 @@
 import {Client, Guild, TextChannel} from "discord.js";
-import App, { AttackMode } from "./app";
+import App, {AttackMode} from "./app";
+import Utils from "./utils";
 
 export default class Worker {
     private readonly app: App;
@@ -49,7 +50,7 @@ export default class Worker {
 
     private populateChannelCache(): this {
         if (!this.guild) {
-            throw new Error("[App.populateChannelCache] Expecting guild");
+            throw new Error("[Worker.populateChannelCache] Expecting guild");
         }
 
         this.channelCache = this.guild.channels.filter((channel: TextChannel) => {
@@ -60,32 +61,58 @@ export default class Worker {
         return this;
     }
 
-    private getRandomChannel(): TextChannel {
+    // TODO: Channels are bound to specific nodes
+    private getRandomNodeRandomChannel(): TextChannel {
         if (!this.channelCache) {
             this.populateChannelCache;
 
             if (!this.channelCache) {
-                throw new Error("[App.getRandomChannel] Expecting channel cache to be populated");
+                throw new Error("[Worker.getRandomChannel] Expecting channel cache to be populated");
             }
         }
-
         
+        return this.channelCache[Utils.getRandomInt(0, this.channelCache.length)];
+    }
+
+    // TODO: Determine if we can keep sending messages, etc.
+    private canContinue(): boolean {
+        return true;
     }
 
     public async start(): Promise<number> {
         let sent: number = 0;
 
         if (this.app.options.MODE !== AttackMode.DMs && (!this.guild || !this.channel)) {
-            throw new Error("[App.start] Expecting guild and channel");
+            throw new Error("[Worker.start] Expecting guild and channel");
         }
+
+        // TODO
+        let msgIterator: number = 0;
 
         switch (this.app.options.MODE) {
             case AttackMode.Random: {
+                while (this.canContinue()) {
+                    this.sendPayload(this.app.messages[msgIterator]);
+                    sent += this.nodes.length;
+                }
 
+                break;
+            }
+
+            default: {
+                throw new Error("[Worker.start] An invalid mode was specified");
             }
         }
 
         return sent;
+    }
+
+    private sendPayload(payload: string): this {
+        for (let i: number = 0; i < this.nodes.length; i++) {
+            this.getRandomNodeRandomChannel().send(payload);
+        }
+
+        return this;
     }
 
     // TODO: Catch login errors (invalid tokens)
