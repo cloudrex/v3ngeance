@@ -3,7 +3,7 @@ Sweet vengeance for Discord
 
 v3ngeance is a raid client for Discord. It is used to load self-bots into a target guild and perform a raid based on the set configuration.
 
-It is recommended to have at least 10-20 user tokens to be used for the raid.
+It is recommended to have at least 10-20 (30+ for maximum impact) user tokens for a successful raid.
 
 #### How do I create accounts for raids?
 
