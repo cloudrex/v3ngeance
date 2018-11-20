@@ -13,6 +13,13 @@ export default abstract class Utils {
         if (options.PREPARE_NODE_AMOUNT !== "all") {
             options.PREPARE_NODE_AMOUNT = parseInt(options.PREPARE_NODE_AMOUNT as any);
         }
+
+        if (options.TARGET_GUILD_CHANNELS_AVOID !== undefined) {
+            options.TARGET_GUILD_CHANNELS_AVOID = (options.TARGET_GUILD_CHANNELS_AVOID as any).split(",");
+        }
+        else {
+            options.TARGET_GUILD_CHANNELS_AVOID = [];
+        }
     
         return options;
     }

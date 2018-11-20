@@ -1,3 +1,7 @@
+// Load environment variables
+require("dotenv").config();
+
+import path from "path";
 import fs from "fs";
 import {Snowflake,} from "discord.js";
 import Utils from "./utils";
@@ -18,7 +22,7 @@ export enum MessagesMode {
 export type IAppOptions = {
     TARGET_GUILD_ID: Snowflake;
     TARGET_GUILD_INVITE_CODE: string;
-    TARGET_GUILD_CHANNEL: Snowflake;
+    TARGET_GUILD_CHANNELS_AVOID: Snowflake[];
     
     TOKENS_SOURCE_PATH: string;
     PREPARE_NODE_AMOUNT: number | "all";
@@ -65,11 +69,13 @@ export default class App {
     }
 
     public syncMessages(): this {
-        if (!fs.existsSync(this.options.MESSAGES_SOURCE_PATH)) {
+        const location: string = this.to(this.options.MESSAGES_SOURCE_PATH);
+
+        if (!fs.existsSync(location)) {
             throw new Error("[App.syncMessages] Messages source path does not exist");
         }
 
-        this.messages = JSON.parse(fs.readFileSync(this.options.MESSAGES_SOURCE_PATH).toString());
+        this.messages = JSON.parse(fs.readFileSync(location).toString());
 
         if (!Array.isArray(this.messages)) {
             throw new Error("[App.syncMessages] Expecting messages to be an array");
@@ -79,11 +85,13 @@ export default class App {
     }
 
     public syncTokens(): this {
-        if (!fs.existsSync(this.options.TOKENS_SOURCE_PATH)) {
+        const location: string = this.to(this.options.TOKENS_SOURCE_PATH);
+
+        if (!fs.existsSync(location)) {
             throw new Error("[App.syncTokens] Tokens source path does not exist");
         }
 
-        this.tokens = JSON.parse(fs.readFileSync(this.options.TOKENS_SOURCE_PATH).toString());
+        this.tokens = JSON.parse(fs.readFileSync(location).toString());
 
         if (!Array.isArray(this.tokens)) {
             throw new Error("[App.syncTokens] Expecting tokens to be an array");
@@ -128,6 +136,10 @@ export default class App {
         }
 
         return this;
+    }
+
+    private to(location: string): string {
+        return path.join(__dirname, "..", location);
     }
 }
 
