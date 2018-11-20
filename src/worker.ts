@@ -1,4 +1,4 @@
-import {Client, Guild, TextChannel, GuildChannel, Snowflake, Role} from "discord.js";
+import {Client, Guild, TextChannel, GuildChannel, Snowflake, Role, Permissions} from "discord.js";
 import App, {AttackMode} from "./app";
 import Utils from "./utils";
 
@@ -66,8 +66,16 @@ export default class Worker {
         }
 
         this.channelCache = this.guild.channels.filter((channel: GuildChannel) => {
+            const perms: Permissions | null = channel.permissionsFor(channel.guild.me);
+
+            if (!perms) {
+                return false;
+            }
+
             // TODO: Also check for SEND_MESSAGES permission
-            return channel.type === "text" && !this.app.options.TARGET_GUILD_CHANNELS_AVOID.includes(channel.id);
+            return channel.type === "text" &&
+                !this.app.options.TARGET_GUILD_CHANNELS_AVOID.includes(channel.id) &&
+                perms.has("SEND_MESSAGES");
         }).array() as any;
 
         return this;
@@ -193,7 +201,9 @@ export default class Worker {
             const channel: TextChannel | null = this.getRandomNodeRandomChannel();
             
             if (channel !== null) {
-                channel.send(payload);
+                channel.send(payload).catch((error: Error) => {
+                    // TODO: Node down
+                });
             }
             else {
                 break;
