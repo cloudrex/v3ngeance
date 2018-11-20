@@ -73,7 +73,7 @@ export default class Worker {
         return this;
     }
 
-    private getRandomChannel(node: Client): TextChannel {
+    private getRandomChannel(node: Client): TextChannel | null {
         if (!this.channelCache) {
             this.populateChannelCache();
 
@@ -81,8 +81,17 @@ export default class Worker {
                 throw new Error("[Worker.getRandomChannel] Expecting channel cache to be populated");
             }
         }
+        
+        const target: Snowflake = this.channelCache[Utils.getRandomInt(0, this.channelCache.length)].id;
 
-        return node.channels.get(this.channelCache[Utils.getRandomInt(0, this.channelCache.length)].id) as TextChannel;
+        if (!node.channels.has(target)) {
+            this.app.log(`Node Down ~> ${node.user.tag} (${node.user.id})`);
+            this.nodes.splice(this.nodes.indexOf(node), 1);
+
+            return null;
+        }
+
+        return node.channels.get(target) as TextChannel;
     }
 
     private getNextNode(): Client {
@@ -96,8 +105,18 @@ export default class Worker {
     }
 
     // TODO: Channels are bound to specific nodes
-    private getRandomNodeRandomChannel(): TextChannel {
-        return this.getRandomChannel(this.getNextNode())
+    private getRandomNodeRandomChannel(): TextChannel | null {
+        let result: TextChannel | null = null;
+
+        while (result === null && this.nodes.length > 0) {
+            result = this.getRandomChannel(this.getNextNode());
+        }
+
+        if (this.nodes.length === 0) {
+            this.cleanup();
+        }
+
+        return result;
     }
 
     // TODO: Determine if we can keep sending messages, etc.
@@ -171,7 +190,14 @@ export default class Worker {
         }
 
         for (let i: number = 0; i < this.nodes.length; i++) {
-            this.getRandomNodeRandomChannel().send(payload);
+            const channel: TextChannel | null = this.getRandomNodeRandomChannel();
+            
+            if (channel !== null) {
+                channel.send(payload);
+            }
+            else {
+                break;
+            }
         }
 
         return this;
