@@ -49,12 +49,18 @@ export default class Worker {
 
         for (let i: number = 0; i < this.nodes.length; i++) {
             if (!this.nodes[i].guilds.has(this.app.options.TARGET_GUILD_ID)) {
-                // TODO: Join node by invite here
+                // TODO: Use join timeout
+                this.app.log(`Joining @ ${this.nodes[i].user.tag}`);
+                await Utils.join(this.app.options.TARGET_GUILD_INVITE_CODE, this.nodes[i].token);
             }
-            else if (!this.guild) {
-                this.guild = this.nodes[i].guilds.get(this.app.options.TARGET_GUILD_ID) as Guild;
-                this.populateChannelCache();
-            }
+        }
+
+        if (this.nodes.length === 0) {
+            throw new Error("[Worker.prepare] No nodes could be prepared");
+        }
+        else if (!this.guild) {
+            this.guild = this.nodes[0].guilds.get(this.app.options.TARGET_GUILD_ID) as Guild;
+            this.populateChannelCache();
         }
 
         return this;
@@ -72,7 +78,6 @@ export default class Worker {
                 return false;
             }
 
-            // TODO: Also check for SEND_MESSAGES permission
             return channel.type === "text" &&
                 !this.app.options.TARGET_GUILD_CHANNELS_AVOID.includes(channel.id) &&
                 perms.has("SEND_MESSAGES");
@@ -234,8 +239,11 @@ export default class Worker {
             });
 
             node.login(token).catch((error: Error) => {
-                if (error.message === "An invalid token was provided.") {
+                if (error.message === "Incorrect login details were provided.") {
                     resolve(null);
+                }
+                else {
+                    throw error;
                 }
             });
         });
