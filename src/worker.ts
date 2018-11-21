@@ -125,8 +125,8 @@ export default class Worker {
         const target: Snowflake = this.channelCache[Utils.getRandomInt(0, this.channelCache.length)].id;
 
         if (!node.channels.has(target)) {
-            this.app.log(`Node Down ~> ${node.user.tag} (${node.user.id}) [${this.nodes.length} up]`);
             this.nodes.splice(this.nodes.indexOf(node), 1);
+            this.app.log(`Node Down ~> ${node.user.tag} (${node.user.id}) [${this.nodes.length} up]`);
 
             return null;
         }
@@ -154,6 +154,7 @@ export default class Worker {
 
         if (this.nodes.length === 0) {
             await this.cleanup();
+            await this.endPrematurely("All nodes down");
         }
 
         return result;
@@ -181,7 +182,7 @@ export default class Worker {
                 });
             }
 
-            return members.random();
+            return members.random() || null;
         }
 
         return null;
